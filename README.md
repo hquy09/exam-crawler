@@ -24,9 +24,10 @@ This is a Python and Selenium-based tool to crawl 10th-grade entrance exam score
       - [Step 1: Configure `main.py`](https://www.google.com/search?q=%23step-1-configure-mainpy)
       - [Step 2: Run the Script](https://www.google.com/search?q=%23step-2-run-the-script)
       - [Step 3: Review the Output](https://www.google.com/search?q=%23step-3-review-the-output)
-  - [Technical Deep Dive](https://www.google.com/search?q=%23technical-deep-dive)
+  - [Technical](https://www.google.com/search?q=%23technical-deep-dive)
       - [Program Architecture](https://www.google.com/search?q=%23program-architecture)
       - [Canvas Scraping Logic](https://www.google.com/search?q=%23canvas-scraping-logic)
+  - [Cleaner.py](https://www.google.com/search?q=cleaner+file+python&oq=cleaner+file+python&gs_lcrp=EgZjaHJvbWUyBggAEEUYOTIKCAEQABgIGA0YHjINCAIQABiGAxiABBiKBTIHCAMQABjvBTIHCAQQABjvBdIBCDMzNzRqMGo3qAIAsAIA&sourceid=chrome&ie=UTF-8)
   - [Contributing](https://www.google.com/search?q=%23contributing)
   - [Legal Disclaimer and Terms of Use](https://www.google.com/search?q=%23legal-disclaimer-and-terms-of-use)
   - [License](https://www.google.com/search?q=%23license)
@@ -158,6 +159,9 @@ The results will be saved into text files in the root directory:
 
 This is an effective and advanced technique for handling modern, JavaScript-heavy websites.
 
+## Cleaner.py
+
+If you are tired of the files generated, use this file to delete log files like **`luong_XX_ketqua.txt`**, **`sbd_khong_co_ket_qua.txt`**, etc......
 
 ## Contributing
 
