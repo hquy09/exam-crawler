@@ -7,16 +7,7 @@
 This is a Python and Selenium-based tool to crawl 10th-grade entrance exam scores from the official education portal in Quang Ninh province, Vietnam. The script is multithreaded, handles the website's complex logic, and writes the results to structured text files.
 
 
-## Key Features
-
-  - **Full Automation**: Automatically selects form fields (education board, academic year, exam name) based on your configuration.
-  - **Intelligent Data Crawling**: Fetches scores for each candidate based on their provided ID range.
-  - **High Performance with Multithreading**: Utilizes multiple CPU cores to run browsers in parallel, drastically speeding up the lookup process.
-  - **Clean and Clear Output**: Records detailed scores for each subject (Math, Literature, English) and any bonus points into well-formatted text files.
-
 ## Table of Contents
-
-  - [Key Features](https://www.google.com/search?q=%23key-features)
   - [Installation and Setup](https://www.google.com/search?q=%23installation-and-setup)
       - [Method 1: Direct Python Environment (Recommended)](https://www.google.com/search?q=%23method-1-direct-python-environment-recommended)
       - [Method 2: Docker (Advanced)](https://www.google.com/search?q=%23method-2-docker-advanced)
