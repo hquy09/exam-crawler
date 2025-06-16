@@ -15,70 +15,82 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 
-
+# --- Global Configurations ---
 file_lock = threading.Lock()
+# File for SBDs that are found to have no results
 NOT_FOUND_FILENAME = "sbd_khong_co_ket_qua.txt"
+# File for SBDs that cause persistent errors after multiple retries
+SBD_ERROR_FILENAME = "sbd_bi_loi.txt"
+
 
 def wait_for_loader_to_disappear(driver):
+    """Waits for the loading spinner to disappear, reloading on timeout."""
     try:
         WebDriverWait(driver, 15).until(
             EC.invisibility_of_element_located((By.CSS_SELECTOR, "div.el-loading-mask"))
         )
     except TimeoutException:
-        print(f"[{threading.current_thread().name}] Quá thời gian chờ loader biến mất. Thử tải lại trang.")
+        print(f"[{threading.current_thread().name}] Timed out waiting for loader to disappear. Reloading page.")
         driver.refresh()
         wait_for_loader_to_disappear(driver)
 
 
 def chon_muc_dropdown(driver, label_text, option_text):
-  
-    for attempt in range(3): #try 3 times
+    """Selects an option from a dropdown menu with retries."""
+    for attempt in range(3):
         try:
-            print(f"[{threading.current_thread().name}] Đang xử lý dropdown '{label_text}'...")
+            # Locate and click the dropdown trigger
             dropdown_xpath = f"//label[contains(normalize-space(), '{label_text}')]/ancestor::div[contains(@class, 'col-md-4')]//input"
-            
-            # click dropdown
             dropdown_trigger = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.XPATH, dropdown_xpath))
             )
             driver.execute_script("arguments[0].click();", dropdown_trigger)
+            
+            # Locate and click the desired option
             option_xpath = f"//li[.//span[text()='{option_text}']]"
             option = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, option_xpath))
             )
             driver.execute_script("arguments[0].click();", option)
-            print(f"[{threading.current_thread().name}] - Đã chọn: '{option_text}'.")
-            time.sleep(0.75) #add delay to ensure the selection is processed
+            
+            print(f"[{threading.current_thread().name}] - Dropdown '{label_text}' set to: '{option_text}'.")
+            time.sleep(0.75)  # Delay to ensure the selection is processed
             return True
         except StaleElementReferenceException:
-            print(f"[{threading.current_thread().name}] Gặp StaleElementReferenceException khi chọn '{label_text}'. Đang thử lại lần {attempt + 1}...")
-            time.sleep(1) 
+            print(f"[{threading.current_thread().name}] StaleElementReferenceException on '{label_text}'. Retrying attempt {attempt + 1}...")
+            time.sleep(1)
         except Exception as e:
-            print(f"!!! [{threading.current_thread().name}] Lỗi khi chọn '{option_text}' cho '{label_text}': {e}")
+            print(f"!!! [{threading.current_thread().name}] Error selecting '{option_text}' for '{label_text}': {e}")
             return False
+    print(f"!!! [{threading.current_thread().name}] Failed to select '{label_text}' after multiple attempts.")
     return False
 
 
 def chon_tat_ca_dropdowns(driver, du_lieu):
+    """Selects all necessary dropdowns to set the search context."""
+    print(f"[{threading.current_thread().name}] Setting all dropdown filters...")
     wait_for_loader_to_disappear(driver)
     chon_muc_dropdown(driver, "Đơn vị", du_lieu["don_vi"])
     chon_muc_dropdown(driver, "Cấp học", du_lieu["cap_hoc"])
     chon_muc_dropdown(driver, "Năm học", du_lieu["nam_hoc"])
     chon_muc_dropdown(driver, "Đợt tuyển sinh", du_lieu["dot_tuyen_sinh"])
     chon_muc_dropdown(driver, "Kỳ thi", du_lieu["ky_thi"])
+    print(f"[{threading.current_thread().name}] All dropdowns have been set.")
 
 
 def get_scores_from_canvas(driver):
+    """Executes JavaScript to extract scores from canvas elements, which are used to render text."""
     get_all_scores_js = """
         const getScoreFromCanvas = (canvasElement) => {
             if (!canvasElement) return 'N/A';
             try {
+                // Access the Vue instance associated with the canvas to get the rendered text
                 const vueInstance = canvasElement.__vue__ || canvasElement.__vueParentComponent;
                 if (vueInstance) {
                     const text = vueInstance.text || (vueInstance.proxy && vueInstance.proxy.text);
                     return text !== undefined ? text : 'N/A';
                 }
-            } catch (e) { }
+            } catch (e) { /* Ignore errors */ }
             return 'N/A';
         };
 
@@ -115,55 +127,60 @@ def get_scores_from_canvas(driver):
 
 
 def crawl_sbd(driver, sbd):
+    """
+    Searches for a single SBD and returns the result.
+    Returns:
+    - A dictionary with scores on success.
+    - "NOT_FOUND" if the server returns a 'not found' message.
+    - "RELOAD_PAGE" if a recoverable page error occurs.
+    """
     try:
-        # sbd
         sbd_xpath = "//label[contains(normalize-space(), 'Số báo danh')]/ancestor::div[contains(@class, 'col-md-4')]//input"
-        sbd_input = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, sbd_xpath)))
+        sbd_input = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, sbd_xpath)))
         sbd_input.clear()
         sbd_input.send_keys(sbd)
-        tra_cuu_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[.//span[contains(normalize-space(), 'Tra cứu')]]"))
-        )
+        
+        tra_cuu_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[.//span[contains(normalize-space(), 'Tra cứu')]]")))
         tra_cuu_button.click()
-        wait = WebDriverWait(driver, 15)
-        wait.until(EC.any_of(
+        
+        # Wait for either the results table or a message box to appear
+        WebDriverWait(driver, 15).until(EC.any_of(
             EC.presence_of_element_located((By.CSS_SELECTOR, ".el-table__body")),
             EC.visibility_of_element_located((By.XPATH, "//div[contains(@class, 'el-message-box__wrapper')]")),
         ))
-        # checking for errors or results
+        
+        # Check for specific pop-up messages
         try:
+            # This pop-up indicates a data loading failure, requiring a page reload
             reload_popup_msg_xpath = "//div[contains(@class, 'el-message-box__wrapper')]//p[contains(text(), 'Có dữ liệu chưa tải thành công')]"
-            reload_popup = driver.find_element(By.XPATH, reload_popup_msg_xpath)
-            if reload_popup.is_displayed():
-                print(f"[{threading.current_thread().name}] Lỗi tải dữ liệu cho SBD {sbd}. Sẽ tải lại trang và thử lại.")
-                close_button = driver.find_element(By.XPATH, "//div[@class='el-message-box__btns']//button")
-                close_button.click()
-                WebDriverWait(driver, 5).until_not(EC.presence_of_element_located((By.CLASS_NAME, "v-modal")))
-                return "RELOAD_PAGE"
+            driver.find_element(By.XPATH, reload_popup_msg_xpath)
+            print(f"[{threading.current_thread().name}] Data load error for SBD {sbd}. Will reload page.")
+            close_button = driver.find_element(By.XPATH, "//div[@class='el-message-box__btns']//button")
+            close_button.click()
+            WebDriverWait(driver, 5).until_not(EC.presence_of_element_located((By.CLASS_NAME, "v-modal")))
+            return "RELOAD_PAGE"
         except NoSuchElementException:
             pass 
 
         try:
+            # This pop-up definitively means the SBD does not exist
             not_found_popup_msg_xpath = "//div[contains(@class, 'el-message-box__wrapper')]//p[contains(text(), 'Không tìm thấy kết quả')]"
-            not_found_popup = driver.find_element(By.XPATH, not_found_popup_msg_xpath)
-            if not_found_popup.is_displayed():
-                print(f"[{threading.current_thread().name}] Không tìm thấy kết quả cho SBD {sbd} (Popup).")
-                close_button = driver.find_element(By.XPATH, "//div[@class='el-message-box__btns']//button")
-                close_button.click()
-                WebDriverWait(driver, 5).until_not(EC.presence_of_element_located((By.CLASS_NAME, "v-modal")))
-                return "NOT_FOUND"
+            driver.find_element(By.XPATH, not_found_popup_msg_xpath)
+            print(f"[{threading.current_thread().name}] SBD {sbd} not found (Popup message).")
+            close_button = driver.find_element(By.XPATH, "//div[@class='el-message-box__btns']//button")
+            close_button.click()
+            WebDriverWait(driver, 5).until_not(EC.presence_of_element_located((By.CLASS_NAME, "v-modal")))
+            return "NOT_FOUND"
         except NoSuchElementException:
             pass 
 
+        # Check for an empty results table
         try:
-            
-            empty_table_text = driver.find_element(By.XPATH, "//span[@class='el-table__empty-text' and text()='Không có dữ liệu']")
-            if empty_table_text.is_displayed():
-                print(f"[{threading.current_thread().name}] Không tìm thấy kết quả cho SBD {sbd} (Bảng trống).")
-                return "NOT_FOUND"
+            driver.find_element(By.XPATH, "//span[@class='el-table__empty-text' and text()='Không có dữ liệu']")
+            print(f"[{threading.current_thread().name}] SBD {sbd} not found (Empty table).")
+            return "NOT_FOUND"
         except NoSuchElementException:
-            # res
+            # If no errors were found, assume success and extract scores
             scores = get_scores_from_canvas(driver)
             priority_score = scores.get('priorityScore', 'N/A')
             if priority_score == 'N/A' or priority_score is None:
@@ -176,72 +193,89 @@ def crawl_sbd(driver, sbd):
             }
 
     except TimeoutException:
-        print(f"[{threading.current_thread().name}] Timeout khi chờ kết quả cho SBD {sbd}. Sẽ tải lại trang và thử lại.")
+        print(f"[{threading.current_thread().name}] Timeout waiting for results for SBD {sbd}. Will reload page.")
         return "RELOAD_PAGE"
     except Exception as e:
-        print(f"!!! [{threading.current_thread().name}] Lỗi không xác định với SBD {sbd}: {str(e)}. Sẽ tải lại trang và thử lại.")
+        print(f"!!! [{threading.current_thread().name}] An unknown error occurred with SBD {sbd}: {str(e)}. Will reload page.")
         return "RELOAD_PAGE"
-    return None
 
 
 def worker(driver, sbd_list, output_filename, du_lieu):
+    """The main worker function for each thread. It iterates through its assigned list of SBDs."""
     url = 'https://quangninh.tsdc.edu.vn/tra-cuu-diem-thi'
     try:
         driver.get(url)
-        print(f"[{threading.current_thread().name}] Đã mở trang web thành công.")
         chon_tat_ca_dropdowns(driver, du_lieu)
+        
         i = 0
         while i < len(sbd_list):
             sbd = sbd_list[i]
-            print(f"[{threading.current_thread().name}] Đang tiến hành tra cứu SBD: {sbd} ({i+1}/{len(sbd_list)})")
-            result = crawl_sbd(driver, sbd)
-            if isinstance(result, dict): #success case
-                try:
-                    scores_dict = {"Toán": "N/A", "Văn": "N/A", "Anh": "N/A"}
-                    for subject in result.get('subjects', []):
-                        subject_name = subject.get('subject', '').lower()
-                        score = subject.get('score', 'N/A')
-                        if 'toán' in subject_name:
-                            scores_dict['Toán'] = score
-                        elif 'văn' in subject_name:
-                            scores_dict['Văn'] = score
-                        elif 'anh' in subject_name or 'ngoại ngữ' in subject_name:
-                            scores_dict['Anh'] = score
-                    
-                    output_line = (f"SDB: {result['sbd']}, Điểm ƯT/KK: {result['priority_score']}, "
-                                   f"Điểm Toán: {scores_dict['Toán']}, Điểm Văn: {scores_dict['Văn']}, "
-                                   f"Điểm Anh: {scores_dict['Anh']}\n")
-
-                    with open(output_filename, 'a', encoding='utf-8') as f:
-                        f.write(output_line)
-                    print(f"[{threading.current_thread().name}] Đã ghi kết quả SBD {sbd} vào file {output_filename}")
-                    i += 1 
-
-                except Exception as e:
-                    print(f"!!! [{threading.current_thread().name}] Lỗi khi ghi file cho SBD {sbd}: {e}")
-                    i += 1 
-
-            elif result == "NOT_FOUND": # unsuccessful case
-                with file_lock: 
-                    with open(NOT_FOUND_FILENAME, 'a', encoding='utf-8') as f:
-                        f.write(f"{sbd}\n")
-                print(f"[{threading.current_thread().name}] Đã ghi SBD {sbd} không tìm thấy vào file {NOT_FOUND_FILENAME}")
-                i += 1 
-
-            elif result == "RELOAD_PAGE": #reload page
-                print(f"[{threading.current_thread().name}] Đang thực hiện tải lại trang...")
-                driver.get(url)
-                chon_tat_ca_dropdowns(driver, du_lieu)
+            succeeded = False
             
-            else: 
-                print(f"[{threading.current_thread().name}] Gặp lỗi không xác định với SBD {sbd}, bỏ qua.")
-                i += 1
-            time.sleep(0.75)
+            # --- MODIFIED: Retry loop for each SBD ---
+            for attempt in range(3):
+                print(f"[{threading.current_thread().name}] Looking up SBD: {sbd} ({i+1}/{len(sbd_list)}) - Attempt {attempt + 1}")
+                result = crawl_sbd(driver, sbd)
+
+                if isinstance(result, dict):  # Success case
+                    try:
+                        scores_dict = {"Toán": "N/A", "Văn": "N/A", "Anh": "N/A"}
+                        for subject in result.get('subjects', []):
+                            subject_name = subject.get('subject', '').lower()
+                            score = subject.get('score', 'N/A')
+                            if 'toán' in subject_name:
+                                scores_dict['Toán'] = score
+                            elif 'văn' in subject_name:
+                                scores_dict['Văn'] = score
+                            elif 'anh' in subject_name or 'ngoại ngữ' in subject_name:
+                                scores_dict['Anh'] = score
+                        
+                        output_line = (f"SDB: {result['sbd']}, Điểm ƯT/KK: {result['priority_score']}, "
+                                       f"Điểm Toán: {scores_dict['Toán']}, Điểm Văn: {scores_dict['Văn']}, "
+                                       f"Điểm Anh: {scores_dict['Anh']}\n")
+
+                        with open(output_filename, 'a', encoding='utf-8') as f:
+                            f.write(output_line)
+                        print(f"[{threading.current_thread().name}] Wrote result for SBD {sbd} to {output_filename}")
+                        succeeded = True
+                        break  # Exit retry loop on success
+
+                    except Exception as e:
+                        print(f"!!! [{threading.current_thread().name}] Error writing file for SBD {sbd}: {e}")
+                        succeeded = True  # Treat as success to avoid logging as a failed SBD
+                        break
+
+                elif result == "NOT_FOUND":  # Definitive 'not found' case
+                    with file_lock: 
+                        with open(NOT_FOUND_FILENAME, 'a', encoding='utf-8') as f:
+                            f.write(f"{sbd}\n")
+                    print(f"[{threading.current_thread().name}] Wrote SBD {sbd} (not found) to {NOT_FOUND_FILENAME}")
+                    succeeded = True
+                    break # Exit retry loop, no need to retry
+
+                elif result == "RELOAD_PAGE":  # Recoverable page error
+                    print(f"[{threading.current_thread().name}] Reloading page due to an external error...")
+                    driver.get(url)
+                    chon_tat_ca_dropdowns(driver, du_lieu)
+                    time.sleep(1) # Wait a bit after reload before retrying the same SBD
+
+                else:  # Unknown error
+                    print(f"[{threading.current_thread().name}] Unknown error with SBD {sbd}, continuing to next attempt.")
+            
+            # --- MODIFICATION: Handle persistent failure after all retries ---
+            if not succeeded:
+                print(f"!!! [{threading.current_thread().name}] All attempts failed for SBD {sbd}. Saving it to the error file.")
+                with file_lock:
+                    with open(SBD_ERROR_FILENAME, 'a', encoding='utf-8') as f:
+                        f.write(f"{sbd}\n")
+
+            i += 1  # Move to the next SBD regardless of outcome
+            time.sleep(2.5) # Polling delay to be respectful to the server
 
     except Exception as e:
-        print(f"!!! [{threading.current_thread().name}] Lỗi nghiêm trọng trong worker: {e}")
+        print(f"!!! [{threading.current_thread().name}] A critical error occurred in the worker: {e}")
     finally:
-        print(f"[{threading.current_thread().name}] Đã hoàn thành nhiệm vụ. Đóng trình duyệt.")
+        print(f"[{threading.current_thread().name}] Task completed. Closing browser.")
         driver.quit()
 
 
@@ -249,9 +283,10 @@ if __name__ == '__main__':
     try:
         num_thr = int(input("Nhập số lượng trình duyệt (luồng) cần khởi tạo: "))
     except ValueError:
-        print("Vui lòng nhập một số nguyên.")
+        print("Vui lòng nhập một số nguyên hợp lệ.")
         exit()
         
+    # --- Configuration ---
     start_sbd = 260001
     end_sbd = 260720
     du_lieu_chung = {
@@ -262,25 +297,29 @@ if __name__ == '__main__':
         "ky_thi": "Tuyển sinh 10 THPT"
     }
 
+    # --- File Initialization ---
+    # Clear the 'not found' and 'error' files at the start of the run
     with open(NOT_FOUND_FILENAME, 'w') as f:
-        f.write('') 
+        f.write('')
+    with open(SBD_ERROR_FILENAME, 'w') as f:
+        f.write('')
     
     all_sbds = [str(i) for i in range(start_sbd, end_sbd + 1)]
     
-    # divide 
-    chunk_size = (len(all_sbds) + num_thr - 1) // num_thr # Chia đều hơn
+    # --- Thread and Driver Setup ---
+    chunk_size = (len(all_sbds) + num_thr - 1) // num_thr
     chunks = [all_sbds[i:i + chunk_size] for i in range(0, len(all_sbds), chunk_size)]
-    #config
+    
     chrome_options = Options()
     chrome_options.add_argument("--incognito")
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-popup-blocking")
-    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false") # Disable images for speed
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    # chrome_options.add_argument("--headless") # hide the browser window
+    # chrome_options.add_argument("--headless") # Uncomment to hide browser windows
     
     drivers = []
     for i in range(num_thr):
@@ -290,7 +329,7 @@ if __name__ == '__main__':
             x = (i % 5) * 300
             y = (i // 5) * 300
             driver.set_window_position(x, y)
-            driver.execute_script("document.body.style.zoom = '0.5'")
+            driver.execute_script("document.body.style.zoom = '0.5'") # Zoom out to fit more content
             drivers.append(driver)
         except Exception as e:
             print(f"Lỗi khi khởi tạo driver {i+1}: {e}")
@@ -315,13 +354,14 @@ if __name__ == '__main__':
         )
         threads.append(thread)
         thread.start()
-        time.sleep(1) 
+        time.sleep(0.25) 
     
     for thread in threads:
         thread.join()
     
     print("\n\n=============================================")
     print("=== TẤT CẢ CÁC LUỒNG ĐÃ HOÀN TẤT ===")
-    print(f"Kết quả đã được lưu vào các file luong_..._ketqua.txt")
-    print(f"Các SBD không có dữ liệu đã được lưu vào file {NOT_FOUND_FILENAME}")
+    print(f"Kết quả đã được lưu vào các file luong_..._ketqua.txt.")
+    print(f"Các SBD không tìm thấy kết quả đã được lưu vào file: {NOT_FOUND_FILENAME}")
+    print(f"Các SBD gây lỗi liên tục đã được lưu vào file: {SBD_ERROR_FILENAME}")
     print("=============================================")
