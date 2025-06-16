@@ -12,7 +12,6 @@ This is a Python and Selenium-based tool to crawl 10th-grade entrance exam score
   - **Full Automation**: Automatically selects form fields (education board, academic year, exam name) based on your configuration.
   - **Intelligent Data Crawling**: Fetches scores for each candidate based on their provided ID range.
   - **High Performance with Multithreading**: Utilizes multiple CPU cores to run browsers in parallel, drastically speeding up the lookup process.
-  - **Robust Error Handling**: Automatically handles "Not Found" popups, data loading errors, and reloads the page when necessary.
   - **Clean and Clear Output**: Records detailed scores for each subject (Math, Literature, English) and any bonus points into well-formatted text files.
 
 ## Table of Contents
