@@ -163,6 +163,19 @@ This is an effective and advanced technique for handling modern, JavaScript-heav
 
 If you are tired of the files generated, use this file to delete log files like **`luong_XX_ketqua.txt`**, **`sbd_khong_co_ket_qua.txt`**, etc......
 
+How to run: 
+On your computer, run this script in **root** directory.
+
+```bash
+python cleaner.py
+```
+
+or
+
+```bash
+python3 cleaner.py
+```
+
 ## Contributing
 
 A special thanks to [@giauydev](https://github.com/giauydev) for contributing ideas and code.
