@@ -32,7 +32,7 @@ This is a Python and Selenium-based tool to crawl 10th-grade entrance exam score
   - [License](https://www.google.com/search?q=%23license)
   - [Author](https://www.google.com/search?q=%23author)
 
-\<br\>
+<br>
 
 ## Installation and Setup
 
@@ -158,7 +158,6 @@ The results will be saved into text files in the root directory:
 
 This is an effective and advanced technique for handling modern, JavaScript-heavy websites.
 
-<br>
 
 ## Contributing
 
