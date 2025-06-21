@@ -36,8 +36,6 @@ def clean_old_files():
         print("Không có file nào cần dọn dẹp.")
     else:
         print(f"Hoàn tất! Đã xóa tổng cộng {deleted_count} file.")
-    print("=============================================")
-
 
 if __name__ == '__main__':
     clean_old_files()
